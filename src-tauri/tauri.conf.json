@@ -1,0 +1,46 @@
+{
+  "productName": "Проповеди Брэнхэма",
+  "version": "1.0.0",
+  "identifier": "com.branham.messages",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Проповеди Брэнхэма",
+        "width": 1440,
+        "height": 900,
+        "resizable": true,
+        "fullscreen": true,
+        "decorations": false,
+        "closable": false,
+        "minimizable": false,
+        "maximizable": false,
+        "alwaysOnTop": true  
+      }
+    ],
+    "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
+    }
+  }
+}
+
+
