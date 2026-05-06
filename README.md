@@ -1,332 +1,174 @@
-# Библиотека — Kiosque Branham
+# Branham Kiosk — Sermon Library
 
-Application kiosque tactile (plein écran, bloqué) pour rechercher et imprimer des prédications PDF.  
-Construite avec **Tauri 2 + Vue 3 + TypeScript + Rust**.
+A fullscreen touchscreen kiosk application for searching and printing William Branham sermon PDFs.  
+Built for church self-service printing stations running Windows, macOS, or Linux.
 
----
-
-## Table des matières
-
-1. [Compilation Windows](#1-compilation-windows)  
-2. [Compilation macOS](#2-compilation-macos)  
-3. [Compilation Linux](#3-compilation-linux)  
-4. [Build automatique via GitHub Actions](#4-build-automatique-github-actions)  
-5. [Déploiement kiosque Windows](#5-déploiement-kiosque-windows)  
-6. [Configuration de l'impression](#6-configuration-de-limpression)  
-7. [Format des fichiers PDF](#7-format-des-fichiers-pdf)  
-8. [Structure du projet](#8-structure-du-projet)
+**Stack:** Tauri 2 · Vue 3 · TypeScript · Rust
 
 ---
 
-## 1. Compilation Windows
+## Table of Contents
 
-> **La compilation Windows doit se faire sur une machine Windows.**  
-> Tauri ne supporte pas la cross-compilation vers Windows depuis macOS ou Linux.  
-> Si vous n'avez pas de PC Windows, utilisez [GitHub Actions](#4-build-automatique-github-actions).
-
-### 1.1 Prérequis (à installer une seule fois)
-
-#### Rust
-```powershell
-winget install Rustlang.Rustup
-# — OU — télécharger https://win.rustup.rs et exécuter rustup-init.exe
-# Choisir l'option 1 (installation par défaut)
-# Fermer et rouvrir le terminal après installation
-```
-```powershell
-rustc --version    # doit afficher rustc 1.78.0 ou plus récent
-```
-
-#### Node.js LTS
-```powershell
-winget install OpenJS.NodeJS.LTS
-# — OU — télécharger https://nodejs.org (version LTS 20.x ou 22.x)
-```
-```powershell
-node --version     # doit afficher v20.x ou v22.x
-```
-
-#### Visual Studio Build Tools 2022
-Télécharger depuis : https://visualstudio.microsoft.com/visual-cpp-build-tools/
-
-Dans l'installeur, cocher obligatoirement :
-- ✅ **Développement Desktop en C++**
-  - ✅ MSVC v143 — Outils de build C++ x64/x86
-  - ✅ Windows 11 SDK (ou Windows 10 SDK)
-
-> **WebView2** est déjà inclus dans Windows 10 (mise à jour 2004+) et Windows 11.  
-> Si absent : https://developer.microsoft.com/microsoft-edge/webview2/
-
-#### SumatraPDF *(pour l'impression silencieuse sur la machine kiosque)*
-```powershell
-winget install SumatraPDF.SumatraPDF
-```
-Sans SumatraPDF, l'impression fonctionne via PowerShell/WMI (fallback automatique).
+1. [Overview](#1-overview)
+2. [Application Screens](#2-application-screens)
+3. [PDF File Format](#3-pdf-file-format)
+4. [Data Sources](#4-data-sources)
+5. [Printing](#5-printing)
+6. [Kiosk Mode](#6-kiosk-mode)
+7. [Development](#7-development)
+8. [Building](#8-building)
+9. [Windows Kiosk Deployment](#9-windows-kiosk-deployment)
+10. [Configuration Storage](#10-configuration-storage)
+11. [Project Structure](#11-project-structure)
+12. [Tauri Commands Reference](#12-tauri-commands-reference)
 
 ---
 
-### 1.2 Cloner et compiler
+## 1. Overview
 
-```powershell
-git clone <url-du-depot>
-cd branham-tauri
+Branham Kiosk is a locked-down desktop application designed to run as a single-purpose printing station at a church. Users can search through a collection of sermon PDFs, preview them, select the number of copies, and send them to the default printer — all without touching a keyboard or mouse, using the built-in on-screen Cyrillic keyboard.
 
-npm install
-
-npm run tauri build
-```
-
-Durée : **10–20 minutes** à la première compilation (Rust compile toutes les dépendances).  
-Les compilations suivantes : 1–3 minutes.
+Key characteristics:
+- **Fullscreen + always on top** — no desktop visible, no taskbar access by default
+- **No window decorations** — no title bar, no resize handles
+- **Self-contained** — works with a local folder of PDFs or a remote HTTP server
+- **Silent printing** — sends directly to the default printer with no print dialog
+- **Touchscreen-ready** — all interactions are large tap targets with on-screen keyboard
 
 ---
 
-### 1.3 Fichiers produits
+## 2. Application Screens
 
-```
-src-tauri\target\release\
-│
-├── branham-messages.exe                          ← exécutable portable (pas d'installation)
-│
-└── bundle\
-    └── nsis\
-        └── Bibliotheque_1.0.0_x64-setup.exe     ← installeur Windows (recommandé)
-```
+The app is a single-page application with six screens managed by an internal router (`Screen` type). There is no URL routing — navigation is state-based.
 
-**Installeur** — installe l'app dans `C:\Program Files\Bibliotheque\`, crée un raccourci bureau et menu Démarrer.  
-**Portable** — copier `branham-messages.exe` sur une clé USB et l'exécuter directement.
+### Screen: Setup (`s-setup`)
 
----
+Shown on first launch or when no source is configured. The admin selects where the PDFs come from.
 
-## 2. Compilation macOS
+**Local folder tab**
+- Opens a native folder picker dialog
+- Scans all `.pdf` files in the selected folder
+- Files that do not match the Branham filename format are silently ignored
+- The selected path is saved to `config.json` for subsequent launches
 
-### 2.1 Prérequis
+**Remote server tab**
+- Admin enters an HTTPS URL pointing to a folder of PDFs
+- The app first attempts to fetch `sermons.json` from that URL (pre-built index)
+- If not found, falls back to parsing the HTML directory listing for `.pdf` links
+- The URL is saved to `config.json`
 
-```bash
-# Xcode Command Line Tools (outils de compilation Apple)
-xcode-select --install
-
-# Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-
-# Node.js (via Homebrew)
-brew install node
-# — OU — télécharger https://nodejs.org
-```
-
-### 2.2 Compiler
-
-```bash
-cd branham-tauri
-npm install
-npm run tauri build
-```
-
-### 2.3 Fichiers produits
-
-```
-src-tauri/target/release/bundle/
-├── macos/
-│   └── Bibliotheque.app          ← application macOS (glisser dans /Applications)
-└── dmg/
-    └── Bibliotheque_1.0.0_x64.dmg  ← image disque distribuable
-```
-
-> Sur Apple Silicon (M1/M2/M3), la cible par défaut est `aarch64-apple-darwin`.  
-> Pour un binaire universel (Intel + Apple Silicon) :
-> ```bash
-> rustup target add aarch64-apple-darwin x86_64-apple-darwin
-> npm run tauri build -- --target universal-apple-darwin
-> ```
+On successful load the app navigates directly to the Home screen. On subsequent launches the saved source is loaded automatically — the Setup screen is skipped.
 
 ---
 
-## 3. Compilation Linux
+### Screen: Home (`s-home`)
 
-### 3.1 Prérequis (Ubuntu 22.04 / Debian 12)
+The main screen users see. Contains three elements stacked vertically:
 
-```bash
-sudo apt update && sudo apt install -y \
-  libwebkit2gtk-4.1-dev \
-  libssl-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev \
-  build-essential \
-  curl \
-  libgtk-3-dev \
-  libsoup-3.0-dev \
-  libjavascriptcoregtk-4.1-dev
+**Search bar**
+- Large text input (EB Garamond, 28 px) with a gold focus ring
+- Supports physical keyboard input and the on-screen keyboard
+- `Escape` clears the input
 
-# Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-
-# Node.js 20
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
+**On-screen Cyrillic keyboard (ЙЦУКЕН layout)**
 ```
-
-### 3.2 Compiler
-
-```bash
-cd branham-tauri
-npm install
-npm run tauri build
+Й Ц У К Е Н Г Ш Щ З Х Ъ
+Ф Ы В А П Р О Л Д Ж Э
+Я Ч С М И Т Ь Б Ю
+[⌫ Erase]  [SPACE]  [Search ›]
 ```
+Each key press appends the character to the search input without stealing focus.
 
-### 3.3 Fichiers produits
-
-```
-src-tauri/target/release/bundle/
-├── appimage/
-│   └── Bibliotheque_1.0.0_amd64.AppImage   ← portable, aucune installation requise
-└── deb/
-    └── Bibliotheque_1.0.0_amd64.deb        ← paquet Debian/Ubuntu
-```
-
-```bash
-# Lancer l'AppImage
-chmod +x Bibliotheque_1.0.0_amd64.AppImage
-./Bibliotheque_1.0.0_amd64.AppImage
-
-# Installer le .deb
-sudo dpkg -i Bibliotheque_1.0.0_amd64.deb
-```
+**Browse by year button**
+- Shows the total count and year range (e.g. "1947 – 1965 · 1 132 sermons")
+- Navigates to the Years screen
 
 ---
 
-## 4. Build automatique GitHub Actions
+### Screen: Search Results (`s-results`)
 
-> **Si vous n'avez pas de PC Windows**, cette méthode compile le `.exe` automatiquement  
-> sur des serveurs GitHub (gratuit pour les dépôts publics, 2 000 min/mois pour les privés).
+Displays sermons matching the search query, sorted by code.
 
-### 4.1 Activer le workflow
+**Query bar (top)**
+- Shows the active search query
+- **"✎ Edit"** button expands the bar into an editable input with the on-screen keyboard inline — the user can refine the search without going back to Home
+- Results update in place when a new search is submitted
+- **"✕ Cancel"** collapses the keyboard and restores the previous query
 
-Le fichier `.github/workflows/build.yml` est déjà présent dans le projet.  
-Il se déclenche à chaque `git push` sur la branche `main`.
+**Result list**
+Each card shows:
+- Year badge (left)
+- Title (large)
+- Date · Location · Filename (small metadata)
+- Arrow indicator
 
-### 4.2 Récupérer les fichiers compilés
-
-1. Pousser le code sur GitHub :
-   ```bash
-   git add .
-   git commit -m "build"
-   git push origin main
-   ```
-2. Sur GitHub → onglet **Actions** → cliquer sur le dernier workflow
-3. En bas de page → section **Artifacts** → télécharger :
-   - `windows-installer` → contient le `.exe` Windows
-   - `macos-dmg` → contient le `.dmg` macOS
-   - `linux-appimage` → contient le `.AppImage` Linux
-
-### 4.3 Créer une Release officielle
-
-Pousser un tag versionné pour créer une Release avec les fichiers en téléchargement direct :
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-GitHub Actions compile automatiquement et publie les fichiers dans **Releases**.
+Tapping a card opens the Preview screen.
 
 ---
 
-## 5. Déploiement kiosque Windows
+### Screen: Browse by Year (`s-years`)
 
-### 5.1 Installer l'application
+A 5-column grid of year cards. Each card shows the year number and the count of sermons for that year. Tapping a year navigates to the year list.
 
-Exécuter l'installeur sur la machine kiosque :
-```
-Bibliotheque_1.0.0_x64-setup.exe
-```
+---
 
-### 5.2 Configurer le kiosque (démarrage auto + plein écran bloqué)
+### Screen: Year List (`s-yr-list`)
 
-Ouvrir **PowerShell en tant qu'Administrateur** et exécuter :
+The full list of sermons for the selected year, same card layout as search results.
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\scripts\kiosque-windows.ps1
-```
+---
 
-Ce script configure automatiquement :
+### Screen: Preview & Print (`s-preview`)
 
-| Paramètre | Valeur |
+Split layout: PDF viewer on the left, print panel on the right.
+
+**PDF viewer (left)**
+- Renders the PDF in a native WebView iframe
+- Shows a loading spinner while the file loads
+- For local files: uses Tauri's `asset://` protocol (converted via `convertFileSrc`)
+- For remote files: uses the direct HTTPS URL
+
+**Print panel (right, 250 px wide)**
+
+*Document info card*
+| Field | Value |
 |---|---|
-| Démarrage automatique | ✅ Au boot Windows (registre + planificateur de tâches) |
-| Connexion automatique | ✅ Sans saisir de mot de passe |
-| Écran | ✅ Ne s'éteint jamais |
-| Veille / Hibernation | ✅ Désactivées |
-| Gestionnaire des tâches | ✅ Désactivé (Ctrl+Alt+Suppr bloqué) |
-| Barre des tâches | ✅ Masquée automatiquement |
-| Notifications Windows | ✅ Désactivées |
+| Code | e.g. `63-0318` |
+| Date | e.g. `18 мар. 1963` |
+| Location | `Jeffersonville, IN` |
+| Filename | original filename |
 
-#### Option kiosque total (remplace Explorer)
+*Copies selector*
+- `−` / `+` buttons, range 1–9
+- Resets to 1 when a new sermon is opened
 
-Pour que **seule l'application apparaisse** au démarrage (sans bureau Windows) :
-
-```powershell
-.\scripts\kiosque-windows.ps1 -ShellReplacement
-```
-
-⚠️ Le bureau Windows est entièrement désactivé. Pour revenir à la normale :
-
-```powershell
-.\scripts\kiosque-windows.ps1 -Restore
-```
-
-### 5.3 Résultat attendu
-
-```
-Allumer le PC
-    ↓
-Windows démarre (connexion automatique)
-    ↓
-L'application Branham s'ouvre en plein écran
-    ↓
-Rien d'autre n'est accessible
-```
+*Print button*
+- **Idle:** gold, shows "PRINT" + copy count + "Duplex"
+- **Printing:** amber, shows "SENDING…"
+- **Success:** green, shows "SENT!" for 4 seconds
+- **Error:** red, shows the error message for 5 seconds
 
 ---
 
-## 6. Configuration de l'impression
+## 3. PDF File Format
 
-L'impression est toujours en :
-- **Orientation : Portrait (Книжная)**
-- **Recto-Verso : Oui**
-- **Imprimante : Imprimante par défaut du système**
+PDF files must be named using the Branham date code as a prefix. The parser (implemented identically in both Rust and TypeScript) extracts the code, title, and date from the filename.
 
-Configurer l'imprimante par défaut dans :  
-**Paramètres Windows → Bluetooth et appareils → Imprimantes et scanners**
+### Format
 
-### Priorité des méthodes d'impression (Windows)
+```
+AA-MMDD[Letter] Title.pdf
+```
 
-| Priorité | Méthode | Condition |
+| Part | Description | Example |
 |---|---|---|
-| 1 | SumatraPDF | Installé dans `Program Files` ou `%LOCALAPPDATA%` |
-| 2 | PowerShell + WMI | Fallback automatique si SumatraPDF absent |
+| `AA` | Two-digit year | `63` → 1963 |
+| `MM` | Month (01–12) | `03` → March |
+| `DD` | Day (01–31) | `18` |
+| `Letter` | Optional suffix letter (A–Z) | `E` |
+| `Title` | Sermon title (spaces or underscores) | `The First Seal` |
 
-### Impression Linux / macOS
-
-Utilise `lp` (CUPS). Configurer l'imprimante par défaut :
-```bash
-# Voir les imprimantes disponibles
-lpstat -p
-
-# Définir l'imprimante par défaut
-lpoptions -d nom-imprimante
-
-# Ou via interface web CUPS
-xdg-open http://localhost:631
-```
-
----
-
-## 7. Format des fichiers PDF
-
-Les PDFs doivent être nommés avec le code Branham en préfixe :
+### Valid examples
 
 ```
 63-0318 The First Seal.pdf
@@ -335,53 +177,439 @@ Les PDFs doivent être nommés avec le code Branham en préfixe :
 47-1207_The_Angel_of_God.pdf
 ```
 
-Format du code : `AA-MMJJ[Lettre]`  
-→ `63-0318` = 18 mars 1963
+### Year interpretation
 
-Les fichiers ne respectant pas ce format sont ignorés.
+| Code year | Interpreted as |
+|---|---|
+| `40` – `99` | 1940 – 1999 |
+| `00` – `39` | 2000 – 2039 |
+
+Files that do not match the `AA-MMDD` prefix pattern are silently ignored during folder scan.
 
 ---
 
-## 8. Structure du projet
+## 4. Data Sources
+
+### Local folder
+
+The Rust backend scans the folder using `std::fs::read_dir`, filters for `.pdf` extensions (case-insensitive), and parses each filename. The resulting list is sorted by code.
+
+Config key: `sourceType = "local"`, `source = "/path/to/folder"`
+
+### Remote server
+
+The TypeScript frontend handles remote loading directly (no Rust involvement):
+
+1. **`sermons.json` manifest** — fetched first. Expected format: an array of `Sermon` objects matching the TypeScript interface. This is the fastest and most reliable method.
+
+2. **HTML directory listing fallback** — if `sermons.json` returns a non-200 or is absent, the app fetches the base URL and parses all `<a href="...">` links ending in `.pdf`. Works with Apache/Nginx autoindex and similar directory listing servers.
+
+Config key: `sourceType = "remote"`, `source = "https://example.com/sermons"`
+
+### `sermons.json` format
+
+```json
+[
+  {
+    "code": "63-0318",
+    "title": "The First Seal",
+    "date": "18 мар. 1963",
+    "year": 1963,
+    "filename": "63-0318 The First Seal.pdf",
+    "lieu": "Jeffersonville, IN"
+  }
+]
+```
+
+---
+
+## 5. Printing
+
+### Print settings (fixed)
+
+| Setting | Value |
+|---|---|
+| Orientation | Portrait |
+| Duplex | Two-sided, short-edge binding (book style) |
+| Copies | Selected by user (1–9) |
+| Printer | System default printer |
+| Dialog | None — fully silent |
+
+### Windows — printing priority
+
+The Rust backend checks for SumatraPDF in the following locations, in order:
+
+1. `%LOCALAPPDATA%\SumatraPDF\SumatraPDF.exe`
+2. `%ProgramFiles%\SumatraPDF\SumatraPDF.exe`
+3. `%ProgramFiles(x86)%\SumatraPDF\SumatraPDF.exe`
+4. `C:\SumatraPDF\SumatraPDF.exe`
+
+**If SumatraPDF is found:**
+```
+SumatraPDF.exe -print-to-default -print-settings "duplexshort,Nx" -silent file.pdf
+```
+
+**If SumatraPDF is not found (PowerShell/WMI fallback):**
+- Reads the default printer via `Win32_Printer`
+- Sets `Orientation = 1` (portrait), `Duplex = 3` (short-edge), `Copies = N` via `Win32_PrinterConfiguration`
+- Invokes `Shell.Application` → `InvokeVerb("Print")`
+- Restores original printer settings after 7 seconds
+
+> SumatraPDF is strongly recommended. The WMI fallback is less reliable and depends on printer driver behavior.
+
+### macOS / Linux — CUPS
+
+```bash
+lp -o sides=two-sided-short-edge -o media=A4 -n <copies> <file>
+```
+
+### Remote PDF printing
+
+For remote sources, the Rust backend downloads the PDF to a temporary file using `reqwest` (async), writes it to disk with `tempfile`, prints it, then deletes the temp file.
+
+### Setting the default printer
+
+| Platform | How to set |
+|---|---|
+| Windows | Settings → Bluetooth & devices → Printers & scanners |
+| macOS | System Preferences → Printers & Scanners |
+| Linux | `lpoptions -d printer-name` or via `http://localhost:631` |
+
+---
+
+## 6. Kiosk Mode
+
+### Window properties (`tauri.conf.json`)
+
+| Property | Value | Effect |
+|---|---|---|
+| `fullscreen` | `true` | Starts fullscreen |
+| `decorations` | `false` | No title bar, no border |
+| `alwaysOnTop` | `true` | Stays above all other windows |
+| `minimizable` | `false` | Cannot be minimized |
+| `maximizable` | `false` | Cannot be maximized |
+| `closable` | `true` | Allows closing via shortcuts (see below) |
+
+### Closing the application (admin)
+
+| Method | Action |
+|---|---|
+| `Ctrl + F4` | Closes immediately (built-in keyboard shortcut) |
+| Taskbar → right-click → Close window | Sends WM_CLOSE, closes normally |
+| Task Manager → End Task | Always works |
+
+`Ctrl + F4` calls `getCurrentWindow().destroy()` from the Vue layer, which bypasses any close prevention in the Rust layer.
+
+---
+
+## 7. Development
+
+### Prerequisites
+
+- **Node.js** 20+ — https://nodejs.org
+- **Rust** stable — https://rustup.rs
+- **Yarn** — `npm install -g yarn`
+- **Tauri CLI** — installed automatically via `yarn install`
+
+**Windows only:** Visual Studio 2022 Build Tools with the "Desktop development with C++" workload.
+
+### Install dependencies
+
+```bash
+yarn install
+```
+
+### Start the dev server
+
+```bash
+yarn dev
+```
+
+This runs `tauri dev`, which:
+1. Starts the Vite frontend on `http://localhost:1420` (via `beforeDevCommand: yarn vite`)
+2. Compiles the Rust backend
+3. Opens the application window with hot-reload for the frontend
+
+Frontend changes (Vue, CSS) reload instantly. Rust changes trigger a recompile.
+
+### Other scripts
+
+```bash
+yarn vite          # frontend only (no Tauri window)
+yarn tauri:build   # production build
+```
+
+---
+
+## 8. Building
+
+> Each platform must be compiled **on** that platform. Tauri does not support cross-compilation.  
+> Use [GitHub Actions](#github-actions) to build Windows `.exe` without a Windows machine.
+
+### Windows
+
+**Additional prerequisites:**
+- Visual Studio 2022 Build Tools (Desktop C++ workload + Windows SDK)
+- WebView2 Runtime (pre-installed on Windows 10 2004+ and Windows 11)
+- SumatraPDF on the target kiosk machine
+
+```powershell
+yarn install
+yarn tauri:build
+```
+
+**Output:**
+```
+src-tauri\target\release\bundle\nsis\Bibliotheque_1.0.0_x64-setup.exe   ← installer
+src-tauri\target\release\branham-messages.exe                            ← portable
+```
+
+The NSIS installer:
+- Installs to `C:\Program Files\Bibliotheque\`
+- Creates a Start Menu folder "Branham"
+- Installs for all users (`perMachine`)
+- Language: Russian
+
+---
+
+### macOS
+
+```bash
+yarn install
+yarn tauri:build
+# or universal binary (Intel + Apple Silicon):
+yarn tauri:mac:universal
+```
+
+**Output:**
+```
+src-tauri/target/release/bundle/dmg/Bibliotheque_1.0.0_x64.dmg
+src-tauri/target/release/bundle/macos/Bibliotheque.app
+```
+
+---
+
+### Linux (Ubuntu 22.04 / Debian 12)
+
+Install system dependencies first:
+
+```bash
+sudo apt update && sudo apt install -y \
+  libwebkit2gtk-4.1-dev libssl-dev libayatana-appindicator3-dev \
+  librsvg2-dev libgtk-3-dev libsoup-3.0-dev \
+  libjavascriptcoregtk-4.1-dev build-essential patchelf
+```
+
+```bash
+yarn install
+yarn tauri:build
+```
+
+**Output:**
+```
+src-tauri/target/release/bundle/appimage/Bibliotheque_1.0.0_amd64.AppImage
+src-tauri/target/release/bundle/deb/Bibliotheque_1.0.0_amd64.deb
+```
+
+---
+
+### GitHub Actions
+
+The workflow at `.github/workflows/build.yml` builds all three platforms automatically on every push to `main`.
+
+**To get a Windows `.exe` without a Windows machine:**
+
+```bash
+git add .
+git commit -m "build"
+git push origin main
+```
+
+Then on GitHub → **Actions** tab → latest run → **Artifacts** → download `windows-installer`.
+
+**To publish a release with download links:**
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+GitHub Actions compiles all platforms and publishes them automatically under **Releases**.
+
+---
+
+## 9. Windows Kiosk Deployment
+
+### Step 1 — Install the app
+
+Run `Bibliotheque_1.0.0_x64-setup.exe` on the kiosk machine.
+
+### Step 2 — Run the kiosk setup script
+
+Open **PowerShell as Administrator** and run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\kiosque-windows.ps1
+```
+
+#### What the script configures
+
+| Setting | Result |
+|---|---|
+| Auto-start | Registry `Run` key + Scheduled Task (dual method, restarts on crash) |
+| Auto-login | Logs in automatically without password prompt |
+| Screen timeout | Never (monitor stays on) |
+| Sleep / Hibernate | Disabled |
+| Task Manager | **Enabled** (admin can kill the app) |
+| Taskbar | Auto-hide |
+| Windows notifications | Disabled |
+| Windows Update reboot | Blocked while user is logged in |
+
+#### Parameters
+
+```powershell
+# Specify app path manually (auto-detected by default)
+.\scripts\kiosque-windows.ps1 -AppPath "C:\Program Files\Bibliotheque\Bibliotheque.exe"
+
+# Specify which user account auto-logs in
+.\scripts\kiosque-windows.ps1 -Username "Kiosk" -Password "secret"
+
+# Full kiosk mode: replace Windows Explorer entirely (no desktop at all)
+.\scripts\kiosque-windows.ps1 -ShellReplacement
+
+# Undo all changes and restore Windows defaults
+.\scripts\kiosque-windows.ps1 -Restore
+```
+
+### Step 3 — Configure the PDF source
+
+On first launch the Setup screen appears. The admin selects either:
+- A local folder containing the sermon PDFs
+- A remote HTTPS URL
+
+The choice is saved permanently. On all subsequent boots the app loads the source automatically and goes straight to the Home screen.
+
+### Step 4 — Configure the printer
+
+In Windows Settings → Printers & Scanners, set the correct printer as default.  
+The app always prints to whatever printer is set as default — there is no printer selection in the UI.
+
+---
+
+## 10. Configuration Storage
+
+The app stores a single `config.json` file:
+
+| Platform | Path |
+|---|---|
+| Windows | `%APPDATA%\com.branham.messages\config.json` |
+| macOS | `~/Library/Application Support/com.branham.messages/config.json` |
+| Linux | `~/.config/com.branham.messages/config.json` |
+
+### File format
+
+```json
+{
+  "source": "/path/to/sermons",
+  "source_type": "local"
+}
+```
+
+or for remote:
+
+```json
+{
+  "source": "https://example.com/sermons",
+  "source_type": "remote"
+}
+```
+
+To reset the app to first-launch state, delete this file.
+
+---
+
+## 11. Project Structure
 
 ```
 branham-tauri/
 │
-├── src/                          # Interface Vue 3
-│   ├── App.vue                   # Tous les écrans (recherche, résultats, impression)
-│   ├── main.ts
-│   ├── style.css
-│   ├── types/index.ts
+├── src/                              # Vue 3 frontend
+│   ├── App.vue                       # All screens + navigation logic
+│   ├── main.ts                       # Vue app entry point
+│   ├── style.css                     # Global styles (fonts, resets)
+│   ├── types/
+│   │   └── index.ts                  # Shared TypeScript interfaces
 │   └── composables/
-│       ├── useSermons.ts         # Lecture dossier local ou serveur distant
-│       └── usePrinter.ts        # Prévisualisation PDF + envoi à l'imprimante
+│       ├── useSermons.ts             # Sermon loading, search, year filter
+│       └── usePrinter.ts            # PDF URL resolution, print invocation
 │
-├── src-tauri/                    # Backend Rust
-│   ├── src/lib.rs                # Commandes Tauri : config, parsing PDF, impression
-│   ├── Cargo.toml
-│   └── tauri.conf.json           # Config fenêtre, installeur NSIS
+├── src-tauri/                        # Rust backend
+│   ├── src/
+│   │   ├── main.rs                   # Tauri entry point
+│   │   └── lib.rs                    # All Tauri commands + print logic
+│   ├── Cargo.toml                    # Rust dependencies
+│   ├── tauri.conf.json               # Window config, bundle targets, NSIS settings
+│   └── icons/                        # App icons (all sizes)
 │
 ├── scripts/
-│   └── kiosque-windows.ps1       # Script de configuration kiosque Windows
+│   └── kiosque-windows.ps1           # Windows kiosk setup script
 │
 ├── .github/
 │   └── workflows/
-│       └── build.yml             # Build automatique Windows + macOS + Linux
+│       └── build.yml                 # CI: build Windows + macOS + Linux
 │
-├── BUILD.md                      # Ce fichier (instructions complètes)
-├── package.json
-├── vite.config.ts
+├── package.json                      # Node scripts and JS dependencies
+├── vite.config.ts                    # Vite build config
+├── tsconfig.json
 └── index.html
 ```
 
 ---
 
-## Données de configuration
+## 12. Tauri Commands Reference
 
-La source des PDFs est sauvegardée dans :
+These are the Rust functions exposed to the frontend via `invoke()`.
 
-| Plateforme | Chemin |
-|---|---|
-| Windows | `%APPDATA%\com.branham.messages\config.json` |
-| macOS | `~/Library/Application Support/com.branham.messages/config.json` |
-| Linux | `~/.config/com.branham.messages/config.json` |
+### `get_config() → Config`
+
+Reads `config.json` from the app config directory.  
+Returns `{ source: null, source_type: null }` if the file does not exist.
+
+### `save_config(config: Config) → void`
+
+Writes `config.json`. Creates the directory if it does not exist.
+
+### `read_sermons(folder: string) → Sermon[]`
+
+Scans a local directory for PDF files, parses each filename using the Branham date-code format, and returns the list sorted by code. Throws if the directory cannot be read.
+
+### `print_pdf(folder: string, filename: string, copies: number) → PrintResult`
+
+Prints a local PDF file. Constructs the full path as `folder + filename`, then delegates to `do_print()`.
+
+### `print_remote_pdf(url: string, copies: number) → PrintResult`
+
+Downloads the PDF from `url` using `reqwest` (async), writes it to a temp file using `tempfile`, calls `do_print()`, then deletes the temp file.
+
+### `PrintResult`
+
+```typescript
+interface PrintResult {
+  success: boolean
+  reason:  string | null   // error message if success === false
+}
+```
+
+### Internal print dispatch (`do_print`)
+
+```
+do_print(path, copies)
+    │
+    ├── [Windows] print_windows(path, copies)
+    │       ├── SumatraPDF found → SumatraPDF.exe -print-to-default ...
+    │       └── not found → PowerShell WMI script
+    │
+    └── [macOS / Linux] print_unix(path, copies)
+            └── lp -o sides=two-sided-short-edge -o media=A4 -n <copies> <path>
+```
