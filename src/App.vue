@@ -6,8 +6,8 @@
       <div class="brand">
         <span class="brand-cross">✝</span>
         <div>
-          <div class="brand-name">Проповеди Брэнхэма</div>
-          <div class="brand-sub">Библиотека проповедей</div>
+          <div class="brand-name">Библиотека</div>
+          <div class="brand-sub">Библиотека данных</div>
         </div>
       </div>
 
@@ -36,7 +36,7 @@
       <section v-if="screen === 's-setup'" class="scr scr-center">
         <div class="setup-box">
           <div class="setup-cross">✝</div>
-          <h1 class="setup-title">Источник проповедей</h1>
+          <h1 class="setup-title">Источник данных</h1>
           <p class="setup-sub">Выберите локальную папку или укажите адрес удалённого сервера</p>
 
           <!-- Вкладки -->
@@ -96,7 +96,7 @@
       <!-- ── ГЛАВНАЯ ── -->
       <section v-else-if="screen === 's-home'" class="scr">
         <div class="home-body">
-          <p class="home-title">Найдите <span>проповедь</span> для печати</p>
+          <p class="home-title">Найдите <span>что вам нужно</span> для печати</p>
 
           <div class="search-wrap" :class="{ focused: searchFocused }">
             <span class="sw-icon">🔍</span>
@@ -147,19 +147,51 @@
       <!-- ── РЕЗУЛЬТАТЫ ПОИСКА ── -->
       <section v-else-if="screen === 's-results'" class="scr">
         <div class="qbar">
-          <div class="qb-box">
+          <div class="qb-box" :class="{ 'qb-box--editing': editingQuery }">
             <span class="qb-icon">🔍</span>
-            <span class="qb-text">{{ lastQuery }}</span>
-            <button class="qb-mod" @click="navigate('s-home')">✎ Изменить</button>
+            <template v-if="editingQuery">
+              <input
+                ref="resultsInputRef"
+                v-model="query"
+                class="qb-input"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                @keydown.enter="doSearchInline"
+                @keydown.escape="cancelEditQuery"
+              />
+              <span v-if="query" class="sw-clear qb-clear" @mousedown.prevent="query = ''">✕</span>
+            </template>
+            <span v-else class="qb-text">{{ lastQuery }}</span>
+            <button v-if="!editingQuery" class="qb-mod" @click="startEditQuery">✎ Изменить</button>
+            <button v-else class="qb-mod qb-mod--cancel" @mousedown.prevent="cancelEditQuery">✕ Отмена</button>
           </div>
         </div>
+
+        <!-- Клавиатура inline при édition -->
+        <div v-if="editingQuery" class="results-kbd">
+          <div v-for="(row, ri) in KBD_ROWS" :key="ri" class="kbd-row">
+            <button
+              v-for="key in row"
+              :key="key"
+              class="key"
+              @mousedown.prevent="kbdPressResults(key)"
+            >{{ key }}</button>
+          </div>
+          <div class="kbd-row">
+            <button class="key key-fn"  @mousedown.prevent="kbdPressResults('⌫')">⌫ Стереть</button>
+            <button class="key key-spc" @mousedown.prevent="kbdPressResults(' ')">ПРОБЕЛ</button>
+            <button class="key key-go"  @mousedown.prevent="doSearchInline">Искать ›</button>
+          </div>
+        </div>
+
         <p class="list-count">{{ countLabel(searchResults.length, null) }}</p>
         <SermonList :sermons="searchResults" @select="openPreview($event, 's-results')" />
       </section>
 
       <!-- ── ПО ГОДАМ ── -->
       <section v-else-if="screen === 's-years'" class="scr">
-        <p class="years-hint">Выберите год, чтобы увидеть проповеди</p>
+        <p class="years-hint">Выберите год, чтобы увидеть все что есть</p>
         <div class="years-scroll">
           <div class="years-grid">
             <button
@@ -202,18 +234,11 @@
           <!-- Панель печати -->
           <aside class="print-side">
             <div class="info-card">
-              <p class="ic-label">Сведения о проповеди</p>
+              <p class="ic-label">Сведения о документе</p>
               <div class="ic-row"><span class="ic-k">Код</span>   <span class="ic-v">{{ curSermon?.code }}</span></div>
               <div class="ic-row"><span class="ic-k">Дата</span>  <span class="ic-v">{{ curSermon?.date }}</span></div>
               <div class="ic-row"><span class="ic-k">Место</span> <span class="ic-v">{{ curSermon?.lieu }}</span></div>
               <div class="ic-row"><span class="ic-k">Файл</span>  <span class="ic-v">{{ curSermon?.filename }}</span></div>
-            </div>
-
-            <div class="info-card">
-              <p class="ic-label">Параметры печати</p>
-              <div class="ic-row"><span class="ic-k">Формат</span>    <span class="ic-v ic-v--gold">Альбом</span></div>
-              <div class="ic-row"><span class="ic-k">Двусторонняя</span><span class="ic-v ic-v--gold">Да</span></div>
-              <div class="ic-row"><span class="ic-k">Принтер</span>   <span class="ic-v">По умолчанию</span></div>
             </div>
 
             <div class="copies-card">
@@ -254,6 +279,7 @@ import SermonList  from './components/SermonList.vue'
 import { useSermons } from './composables/useSermons'
 import { usePrinter } from './composables/usePrinter'
 import type { Screen, Sermon } from './types'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 
 /* ─── Keyboard ─────────────────────────────────────── */
 const KBD_ROWS = ['ЙЦУКЕНГШЩЗХЪ', 'ФЫВАПРОЛДЖЭ', 'ЯЧСМИТЬБЮ']
@@ -276,7 +302,7 @@ const headerTitle = computed(() => {
   switch (screen.value) {
     case 's-results':  return 'Результаты поиска'
     case 's-years':    return 'По годам'
-    case 's-yr-list':  return `Проповеди ${selectedYear.value} года`
+    case 's-yr-list':  return `Документы ${selectedYear.value} года`
     case 's-preview':  return curSermon.value?.title ?? ''
     default:           return ''
   }
@@ -298,6 +324,7 @@ const backLabel = computed(() => {
 })
 
 function navigate(s: Screen): void {
+  if (s !== 's-results') editingQuery.value = false
   screen.value = s
   if (s === 's-home') nextTick(() => searchInputRef.value?.focus())
 }
@@ -324,7 +351,7 @@ async function handleSelectFolder(): Promise<void> {
   setupError.value    = ''
   try {
     const path = await selectLocalFolder()
-    if (path) { navigate('s-home'); showToast(`✓ ${totalCount.value} проповедей загружено`) }
+    if (path) { navigate('s-home'); showToast(`✓ ${totalCount.value} данных загружено`) }
   } catch (e: unknown) {
     setupError.value = e instanceof Error ? e.message : String(e)
   } finally { loadingSource.value = false }
@@ -338,7 +365,7 @@ async function handleSetRemote(): Promise<void> {
   try {
     await setRemoteUrl(url)
     navigate('s-home')
-    showToast(`✓ ${totalCount.value} проповедей загружено`)
+    showToast(`✓ ${totalCount.value} данных загружено`)
   } catch (e: unknown) {
     setupError.value = e instanceof Error ? e.message : String(e)
   } finally { loadingSource.value = false }
@@ -350,10 +377,12 @@ const lastQuery      = ref('')
 const searchResults  = ref<Sermon[]>([])
 const searchFocused  = ref(false)
 const searchInputRef = ref<HTMLInputElement | null>(null)
+const resultsInputRef = ref<HTMLInputElement | null>(null)
+const editingQuery   = ref(false)
 
 const yearRangeLabel = computed(() =>
   totalCount.value
-    ? `С ${yearRange.value} год · ${totalCount.value} проповедей`
+    ? `С ${yearRange.value} год · ${totalCount.value} данных`
     : 'Загрузка…'
 )
 
@@ -365,10 +394,35 @@ function kbdPress(key: string): void {
 function doSearch(): void {
   const q = query.value.trim()
   if (!q) return
-  lastQuery.value   = q
+  lastQuery.value     = q
   searchResults.value = search(q)
-  prevScreen.value  = 's-results'
+  editingQuery.value  = false
+  prevScreen.value    = 's-results'
   navigate('s-results')
+}
+
+function startEditQuery(): void {
+  query.value        = lastQuery.value
+  editingQuery.value = true
+  nextTick(() => resultsInputRef.value?.focus())
+}
+
+function cancelEditQuery(): void {
+  query.value        = lastQuery.value
+  editingQuery.value = false
+}
+
+function doSearchInline(): void {
+  const q = query.value.trim()
+  if (!q) return
+  lastQuery.value     = q
+  searchResults.value = search(q)
+  editingQuery.value  = false
+}
+
+function kbdPressResults(key: string): void {
+  query.value = key === '⌫' ? query.value.slice(0, -1) : query.value + key
+  resultsInputRef.value?.focus()
 }
 
 /* ─── Years ─────────────────────────────────────────── */
@@ -410,7 +464,7 @@ const printBtnSub = computed(() => {
   if (printer.status.value === 'error')   return printer.errorMsg.value
   if (printer.status.value === 'success') return 'Печать идёт…'
   const c = printer.copies.value
-  return `${c} копи${c === 1 ? 'я' : c < 5 ? 'и' : 'й'} · Альбом · Двусторонняя`
+  return `${c} копи${c === 1 ? 'я' : c < 5 ? 'и' : 'й'} · Двусторонняя`
 })
 
 async function doPrint(): Promise<void> {
@@ -441,22 +495,32 @@ function updateClock(): void {
 
 let clockInterval: ReturnType<typeof setInterval>
 
+/* ─── Ctrl+F4 : fermeture de secours ───────────────── */
+async function handleKeydown(e: KeyboardEvent): Promise<void> {
+  if (e.ctrlKey && e.key === 'F4') {
+    await getCurrentWindow().destroy()
+  }
+}
+
 /* ─── Lifecycle ─────────────────────────────────────── */
 onMounted(async () => {
+  window.addEventListener('keydown', handleKeydown)
   updateClock()
   clockInterval = setInterval(updateClock, 30_000)
   const ready = await init()
   if (ready) navigate('s-home')
   else {
-    // Pré-remplir l'URL si remote déjà configuré
     if (sourceType.value === 'remote') {
-      remoteUrl.value  = sermonsSource.value
-      setupTab.value   = 'remote'
+      remoteUrl.value = sermonsSource.value
+      setupTab.value  = 'remote'
     }
   }
 })
 
-onBeforeUnmount(() => clearInterval(clockInterval))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+  clearInterval(clockInterval)
+})
 </script>
 
 <style scoped>
@@ -591,11 +655,21 @@ onBeforeUnmount(() => clearInterval(clockInterval))
 
 /* ══ RESULTS / QBAR ══ */
 .qbar { padding: 12px 36px; background: #fff; border-bottom: 1.5px solid #e8e0d0; flex-shrink: 0; display: flex; gap: 12px; }
-.qb-box { flex: 1; background: #f5f1ea; border: 1.5px solid #ddd5c5; border-radius: 12px; display: flex; align-items: center; overflow: hidden; }
-.qb-icon { padding: 0 16px; font-size: 17px; color: #b0a090; }
+.qb-box { flex: 1; background: #f5f1ea; border: 1.5px solid #ddd5c5; border-radius: 12px; display: flex; align-items: center; overflow: hidden; transition: border-color .2s; }
+.qb-box--editing { border-color: #9a7530; box-shadow: 0 0 0 3px rgba(154,117,48,.1); background: #fff; }
+.qb-icon { padding: 0 16px; font-size: 17px; color: #b0a090; flex-shrink: 0; }
 .qb-text { flex: 1; font-family: 'EB Garamond', serif; font-size: 21px; color: #9a7530; padding: 12px 0; }
-.qb-mod  { padding: 0 18px; font-size: 13px; font-weight: 500; color: #8a7d6a; border-left: 1.5px solid #ddd5c5; cursor: pointer; display: flex; align-items: center; background: transparent; border-radius: 0; border-top: none; border-bottom: none; border-right: none; transition: all .15s; white-space: nowrap; }
+.qb-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  font-family: 'EB Garamond', serif; font-size: 21px; color: #2a1e10;
+  padding: 12px 0; caret-color: #9a7530; -webkit-user-select: text; user-select: text;
+}
+.qb-clear { border-left: 1px solid #ede8df; }
+.qb-mod  { padding: 0 18px; font-size: 13px; font-weight: 500; color: #8a7d6a; border-left: 1.5px solid #ddd5c5; cursor: pointer; display: flex; align-items: center; background: transparent; border-radius: 0; border-top: none; border-bottom: none; border-right: none; transition: all .15s; white-space: nowrap; height: 100%; }
 .qb-mod:hover { background: #ede8df; color: #9a7530; }
+.qb-mod--cancel { color: #c03020; }
+.qb-mod--cancel:hover { background: #fff5f5; color: #c03020; }
+.results-kbd { padding: 10px 36px 8px; background: #fff; border-bottom: 1.5px solid #e8e0d0; flex-shrink: 0; display: flex; flex-direction: column; gap: 5px; }
 .list-count { padding: 10px 36px 4px; font-size: 13px; color: #b0a090; flex-shrink: 0; }
 
 /* ══ YEARS ══ */

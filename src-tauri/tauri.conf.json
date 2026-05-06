@@ -1,5 +1,5 @@
 {
-  "productName": "Проповеди Брэнхэма",
+  "productName": "Библиотека",
   "version": "1.0.0",
   "identifier": "com.branham.messages",
   "build": {
@@ -10,28 +10,40 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["app", "dmg", "nsis", "appimage", "deb"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false,
+        "languages": ["Russian"],
+        "installerIcon": "icons/icon.ico",
+        "installMode": "perMachine",
+        "startMenuFolder": "Branham"
+      },
+      "wix": {
+        "language": "fr-FR"
+      }
+    }
   },
   "app": {
     "windows": [
       {
-        "title": "Проповеди Брэнхэма",
+        "title": "Библиотека",
         "width": 1440,
         "height": 900,
         "resizable": true,
         "fullscreen": true,
         "decorations": false,
-        "closable": false,
+        "closable": true,
         "minimizable": false,
         "maximizable": false,
-        "alwaysOnTop": true  
+        "alwaysOnTop": true
       }
     ],
     "security": {

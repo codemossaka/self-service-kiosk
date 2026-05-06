@@ -40,7 +40,7 @@ export function useSermons() {
 
   // ─── Source locale (dossier) ────────────────────────
   async function selectLocalFolder(): Promise<string | null> {
-    const selected = await open({ title: 'Выберите папку с PDF-проповедями', directory: true, multiple: false })
+    const selected = await open({ title: 'Выберите папку с PDF-файлами', directory: true, multiple: false })
     if (!selected || typeof selected !== 'string') return null
     await loadLocalFolder(selected)
     await saveConfig({ source: selected, sourceType: 'local' })
