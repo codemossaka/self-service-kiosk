@@ -5,7 +5,7 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "yarn vite",
     "beforeBuildCommand": "npm run build"
   },
   "bundle": {
