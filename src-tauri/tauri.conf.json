@@ -39,11 +39,11 @@
         "height": 900,
         "resizable": true,
         "fullscreen": true,
-        "decorations": false,
+        "decorations": true,
         "closable": true,
-        "minimizable": false,
-        "maximizable": false,
-        "alwaysOnTop": true
+        "minimizable": true,
+        "maximizable": true,
+        "alwaysOnTop": false
       }
     ],
     "security": {
@@ -54,5 +54,4 @@
     }
   }
 }
-
 

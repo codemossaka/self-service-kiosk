@@ -27,6 +27,16 @@ export function usePrinter() {
 
   function resetCopies(): void { copies.value = 1 }
 
+  function friendlyPrintError(error: unknown): string {
+    const raw = error instanceof Error ? error.message : String(error)
+
+    if (raw.includes('SumatraPDF') || raw.includes('Windows') || raw.includes('PowerShell')) {
+      return 'Установите SumatraPDF для печати PDF.'
+    }
+
+    return raw.length > 120 ? `${raw.slice(0, 117)}...` : raw
+  }
+
   async function print(
     sermon: Sermon,
     source: string,
@@ -58,7 +68,7 @@ export function usePrinter() {
       }
     } catch (e: unknown) {
       status.value   = 'error'
-      errorMsg.value = e instanceof Error ? e.message : String(e)
+      errorMsg.value = friendlyPrintError(e)
       setTimeout(() => { status.value = 'idle' }, 5000)
     }
   }

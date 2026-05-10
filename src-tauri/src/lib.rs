@@ -183,20 +183,9 @@ fn do_print(path: &str, copies: u32) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn print_windows(path: &str, copies: u32) -> Result<(), String> {
-    let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
-    let pf    = std::env::var("ProgramFiles").unwrap_or_else(|_| "C:\\Program Files".into());
-    let pf86  = std::env::var("ProgramFiles(x86)").unwrap_or_else(|_| "C:\\Program Files (x86)".into());
-
-    let candidates = [
-        format!("{}\\SumatraPDF\\SumatraPDF.exe", local),
-        format!("{}\\SumatraPDF\\SumatraPDF.exe", pf),
-        format!("{}\\SumatraPDF\\SumatraPDF.exe", pf86),
-        "C:\\SumatraPDF\\SumatraPDF.exe".to_string(),
-    ];
-
-    if let Some(sumatra) = candidates.iter().find(|p| std::path::Path::new(*p).exists()) {
+    if let Some(sumatra) = find_sumatra_pdf() {
         let settings = format!("duplexshort,{}x", copies);
-        let status = std::process::Command::new(sumatra)
+        let status = std::process::Command::new(&sumatra)
             .args(["-print-to-default", "-print-settings", &settings, "-silent", path])
             .status()
             .map_err(|e| format!("SumatraPDF: {}", e))?;
@@ -204,26 +193,130 @@ fn print_windows(path: &str, copies: u32) -> Result<(), String> {
                else { Err(format!("SumatraPDF code: {:?}", status.code())) };
     }
 
-    let path_safe = path.replace('"', "'");
+    print_windows_shell_fallback(path, copies)
+}
+
+#[cfg(target_os = "windows")]
+fn find_sumatra_pdf() -> Option<PathBuf> {
+    let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
+    let pf    = std::env::var("ProgramFiles").unwrap_or_else(|_| "C:\\Program Files".into());
+    let pf86  = std::env::var("ProgramFiles(x86)").unwrap_or_else(|_| "C:\\Program Files (x86)".into());
+
+    let mut candidates = vec![
+        PathBuf::from(format!("{}\\SumatraPDF\\SumatraPDF.exe", local)),
+        PathBuf::from(format!("{}\\Microsoft\\WinGet\\Links\\SumatraPDF.exe", local)),
+        PathBuf::from(format!("{}\\SumatraPDF\\SumatraPDF.exe", pf)),
+        PathBuf::from(format!("{}\\SumatraPDF\\SumatraPDF.exe", pf86)),
+        PathBuf::from("C:\\SumatraPDF\\SumatraPDF.exe"),
+    ];
+
+    if let Some(path) = find_sumatra_in_winget_packages(&local) {
+        candidates.push(path);
+    }
+
+    if let Some(path) = find_sumatra_with_where() {
+        candidates.push(path);
+    }
+
+    candidates.into_iter().find(|p| p.exists())
+}
+
+#[cfg(target_os = "windows")]
+fn find_sumatra_in_winget_packages(local: &str) -> Option<PathBuf> {
+    let packages = PathBuf::from(local).join("Microsoft\\WinGet\\Packages");
+    let entries = fs::read_dir(packages).ok()?;
+
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_lowercase();
+        if name.contains("sumatrapdf") {
+            if let Some(exe) = find_sumatra_under(&entry.path(), 3) {
+                return Some(exe);
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn find_sumatra_under(dir: &PathBuf, max_depth: usize) -> Option<PathBuf> {
+    if max_depth == 0 {
+        return None;
+    }
+
+    let entries = fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_lowercase();
+
+        if path.is_file() && name.starts_with("sumatrapdf") && name.ends_with(".exe") {
+            return Some(path);
+        }
+
+        if path.is_dir() {
+            if let Some(found) = find_sumatra_under(&path, max_depth - 1) {
+                return Some(found);
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn find_sumatra_with_where() -> Option<PathBuf> {
+    let output = std::process::Command::new("where")
+        .arg("SumatraPDF.exe")
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(PathBuf::from)
+}
+
+#[cfg(target_os = "windows")]
+fn print_windows_shell_fallback(path: &str, copies: u32) -> Result<(), String> {
+    let attempted_path = PathBuf::from(path);
+    let tmp_path = tempfile::Builder::new()
+        .prefix("branham-print-")
+        .suffix(".pdf")
+        .tempfile()
+        .map_err(|e| format!("Ошибка временного файла: {}", e))?
+        .into_temp_path();
+
+    fs::copy(path, &tmp_path)
+        .map_err(|e| format!("Ошибка подготовки печати: {}", e))?;
+
+    let print_path = tmp_path.to_string_lossy().replace('"', "'");
     let script = format!(r#"
 $ErrorActionPreference = 'Stop'
 try {{
     $name = (Get-WmiObject -Query "SELECT * FROM Win32_Printer WHERE Default=$true").Name
     if (-not $name) {{ throw "Нет принтера по умолчанию" }}
-    $cfg = Get-WmiObject Win32_PrinterConfiguration -Filter "Name='$name'"
+    $cfg = Get-WmiObject Win32_PrinterConfiguration | Where-Object {{ $_.Name -eq $name }} | Select-Object -First 1
+    if (-not $cfg) {{ throw "Не удалось открыть настройки принтера" }}
     $o0 = $cfg.Orientation ; $d0 = $cfg.Duplex ; $c0 = $cfg.Copies
     $cfg.Orientation = 1 ; $cfg.Duplex = 3 ; $cfg.Copies = {copies}
     $cfg.Put() | Out-Null
     Start-Sleep -Milliseconds 400
     $sh   = New-Object -ComObject Shell.Application
-    $dir  = $sh.Namespace([IO.Path]::GetDirectoryName("{path_safe}"))
-    $file = $dir.ParseName([IO.Path]::GetFileName("{path_safe}"))
+    $dir  = $sh.Namespace([IO.Path]::GetDirectoryName("{print_path}"))
+    if (-not $dir) {{ throw "Не удалось открыть папку PDF" }}
+    $file = $dir.ParseName([IO.Path]::GetFileName("{print_path}"))
+    if (-not $file) {{ throw "Не удалось открыть PDF для печати" }}
     $file.InvokeVerb("Print")
     Start-Sleep -Seconds 7
     $cfg.Orientation = $o0 ; $cfg.Duplex = $d0 ; $cfg.Copies = $c0
     $cfg.Put() | Out-Null
 }} catch {{ Write-Error $_.Exception.Message ; exit 1 }}
-"#, copies = copies, path_safe = path_safe);
+"#, copies = copies, print_path = print_path);
 
     let out = std::process::Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", &script])
@@ -231,7 +324,15 @@ try {{
         .map_err(|e| format!("PowerShell: {}", e))?;
 
     if out.status.success() { Ok(()) }
-    else { Err(format!("PowerShell: {}", String::from_utf8_lossy(&out.stderr).trim())) }
+    else {
+        Err(format!(
+            "Не удалось напечатать PDF через Windows. Установите SumatraPDF и попробуйте снова. Файл: {}",
+            attempted_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("PDF")
+        ))
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -264,11 +365,8 @@ pub fn run() {
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
 
-            // Plein écran garanti au démarrage
-            window.set_fullscreen(true).unwrap();
-
-            // Pas de barre de titre ni de bordures
-            window.set_decorations(false).unwrap();
+            window.set_decorations(true).unwrap();
+            window.maximize().unwrap();
 
             Ok(())
         })
