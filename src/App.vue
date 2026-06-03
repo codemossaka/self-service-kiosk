@@ -547,6 +547,13 @@ onBeforeUnmount(() => {
   padding: 9px 18px; color: #6a5d4e; font-size: 13px; font-weight: 500;
   cursor: pointer; white-space: nowrap; transition: all .15s;
 }
+.back-btn {
+  min-height: 48px;
+  padding: 12px 26px;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
 .back-btn:hover, .folder-btn:hover { background: #ede8df; border-color: #c9b89a; }
 
 /* ── Screens ── */
@@ -677,14 +684,14 @@ onBeforeUnmount(() => {
 .years-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 28px 28px;
+  padding: 10px 20px 28px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .years-grid {
   width: 100%;
-  max-width: 1160px;
+  max-width: none;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20px;
