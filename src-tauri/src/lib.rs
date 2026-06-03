@@ -181,12 +181,20 @@ fn do_print(path: &str, copies: u32) -> Result<(), String> {
     Err("Plateforme non supportée".to_string())
 }
 
+// Empêche l'apparition d'une fenêtre console (qui volerait le focus du
+// kiosque) lors du lancement de sous-processus sous Windows.
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 #[cfg(target_os = "windows")]
 fn print_windows(path: &str, copies: u32) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+
     if let Some(sumatra) = find_sumatra_pdf() {
         let settings = format!("duplexshort,{}x", copies);
         let status = std::process::Command::new(&sumatra)
             .args(["-print-to-default", "-print-settings", &settings, "-silent", path])
+            .creation_flags(CREATE_NO_WINDOW)
             .status()
             .map_err(|e| format!("SumatraPDF: {}", e))?;
         return if status.success() { Ok(()) }
@@ -265,8 +273,11 @@ fn find_sumatra_under(dir: &PathBuf, max_depth: usize) -> Option<PathBuf> {
 
 #[cfg(target_os = "windows")]
 fn find_sumatra_with_where() -> Option<PathBuf> {
+    use std::os::windows::process::CommandExt;
+
     let output = std::process::Command::new("where")
         .arg("SumatraPDF.exe")
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .ok()?;
 
@@ -283,6 +294,8 @@ fn find_sumatra_with_where() -> Option<PathBuf> {
 
 #[cfg(target_os = "windows")]
 fn print_windows_shell_fallback(path: &str, copies: u32) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+
     let attempted_path = PathBuf::from(path);
     let tmp_path = tempfile::Builder::new()
         .prefix("branham-print-")
@@ -320,6 +333,7 @@ try {{
 
     let out = std::process::Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", &script])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|e| format!("PowerShell: {}", e))?;
 
